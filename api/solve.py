@@ -24,10 +24,25 @@ class MoveEnum(Enum):
     NONE = 5
 
 # =========================================================
-# FUNGSI INTI (KODE ASLI ANDA)
+# FUNGSI BARU UNTUK KONVERSI STATE
 # =========================================================
 
-# --- FUNGSI ASLI ANDA DIMULAI DI SINI ---
+def stateToTuple(state_matrix: list[list[int]]) -> tuple:
+    """Mengubah matriks list 3x3 menjadi tuple 1D untuk perbandingan yang aman."""
+    flat_list = [item for sublist in state_matrix for item in sublist]
+    return tuple(flat_list)
+
+def tupleToState(state_tuple: tuple) -> list[list[int]]:
+    """Mengubah tuple 1D kembali menjadi matriks list 3x3."""
+    return [
+        list(state_tuple[0:3]),
+        list(state_tuple[3:6]),
+        list(state_tuple[6:9])
+    ]
+
+# =========================================================
+# FUNGSI INTI (KODE ASLI ANDA)
+# =========================================================
 
 def convertFrontEndToMoves(bfsList) -> dict:
     prevMove = bfsList[0]["frontEndPath"][0]
@@ -37,14 +52,19 @@ def convertFrontEndToMoves(bfsList) -> dict:
         moves = []
         
         for item in step["frontEndPath"]:
+            # item di sini adalah tuple (state)
             move = beforeAfterToMove(prevMove, item)
             moves.append(move)
             prevMove = item
 
         step["moves"] = moves
     return bfsList
-            
-def beforeAfterToMove(before, after):
+        
+def beforeAfterToMove(before_tuple, after_tuple):
+    # DARI TUPLE KE MATRIKS
+    before = tupleToState(before_tuple)
+    after = tupleToState(after_tuple)
+    
     moves = []
 
     temp = copy.deepcopy(before)
@@ -61,6 +81,7 @@ def beforeAfterToMove(before, after):
             break
     
     # [x - 1] [y]
+    # Semua akses ke 'before' dan 'temp' sudah aman karena mereka adalah list/matriks
     item1 = foundZero[0] - 1
     if item1 >= 0:
         temp1 = copy.deepcopy(before)
@@ -106,24 +127,31 @@ def beforeAfterToMove(before, after):
         
 
     for move in moves:
-        if str(move["State"]) == str(after):
+        # PENTING: Konversi State di move menjadi tuple untuk perbandingan yang aman
+        if stateToTuple(move["State"]) == stateToTuple(after):
             return move["Move"]
         
     return MoveEnum.NONE
     
 def convertToFrontEnd(bfsList) -> dict:
     frontEndList = []
-    # 'now' dan looping print yang asli sudah dihapus karena ini API
 
     for index in range(1, len(bfsList)):
         
-        possibleMoves = findMoves(bfsList[index - 1])
+        # PENTING: Ubah state ke matriks list sebelum dikirim ke findMoves
+        currentStateMatrix = tupleToState(bfsList[index - 1]["state"])
+        possibleMoves = findMoves({"state": currentStateMatrix}) # findMoves menerima dict {"state": matrix}
         
-        # Perlu dikonversi ke format yang sama dengan `findMoves`
-        possible_states = [move['state'] for move in possibleMoves] 
+        # Ambil state dari possibleMoves (masih dalam bentuk matriks list)
+        possible_states_matrix = [move for move in possibleMoves] 
         
-        if (bfsList[index]["state"] in possible_states): # Perbaikan: Cek state di list of states
-            bfsList[index]["frontEndPath"] = [bfsList[index]["state"]]
+        # Konversi semua possible state matrix menjadi tuple untuk perbandingan
+        possible_states_tuple = [stateToTuple(s) for s in possible_states_matrix]
+        
+        current_state_tuple = bfsList[index]["state"]
+
+        if (current_state_tuple in possible_states_tuple): # Cek state tuple di list of state tuple
+            bfsList[index]["frontEndPath"] = [current_state_tuple]
         else:
             bfsList[index]["frontEndPath"] = backTrack(bfsList[index - 1], bfsList[index])
 
@@ -132,7 +160,8 @@ def convertToFrontEnd(bfsList) -> dict:
     return frontEndList
 
 def backTrack(start, end):
-    listItem = [x for x in start["path"] if x in end["path"]]
+    # start["path"] dan end["path"] berisi list of TUPLE state
+    listItem = [x for x in start["path"] if x in end["path"]] # Perbandingan aman dengan tuple
 
     frontEndPath = []
 
@@ -141,8 +170,6 @@ def backTrack(start, end):
 
     # Pastikan listItem tidak kosong sebelum mencari index
     if not listItem:
-        # Jika tidak ada titik temu, mungkin ini langkah pertama atau ada masalah. 
-        # Kita kembalikan saja end["state"] untuk menghindari error.
         return [end["state"]] 
 
     startIndex = startPath.index(listItem[len(listItem) - 1])
@@ -153,61 +180,70 @@ def backTrack(start, end):
         
     for i in range(endIndex + 1, len(endPath), 1):
         frontEndPath.append(endPath[i])
+        
     frontEndPath.append(end["state"])
     
     return frontEndPath
         
 def BestFirstSearch(initialState, goalState) -> dict:
     frontier = []
-    explored = []
+    explored = [] # Sekarang akan menyimpan tuple
     steps = []
 
-    frontier.append({"state": initialState, "heuristic": countHeuristic(initialState, goalState), "path": []})
+    # KONVERSI KE TUPLE SAAT AWAL
+    initialStateTuple = stateToTuple(initialState)
+    goalStateTuple = stateToTuple(goalState)
+    
+    # State yang disimpan di frontier, explored, steps, dan path adalah TUPLE
+    frontier.append({"state": initialStateTuple, 
+                     "heuristic": countHeuristic(initialState, goalState), 
+                     "path": []})
     
     while len(frontier) > 0:
         currentState = frontier.pop(0)
-        state = currentState["state"]
+        state_tuple = currentState["state"]
         
-        # Cek kalau current state sudah pernah di cek sebelumnya
-        if state in explored:
+        # Cek kalau current state sudah pernah di cek sebelumnya (AMAN: perbandingan tuple)
+        if state_tuple in explored:
             continue
-        explored.append(state)
+        explored.append(state_tuple)
 
         # Batasan jumlah langkah
-        if (len(explored) >= 1000):
-            break
+        if (len(explored) >= 10000): # Batas eksplorasi dinaikkan
+             break
 
         steps.append(currentState)
         
-        # Cek apabila sudah mencapai goal
-        if (currentState["state"] == goalState):
+        # Cek apabila sudah mencapai goal (AMAN: perbandingan tuple)
+        if (state_tuple == goalStateTuple):
             break
         
-        # Ambil semua kemungkinan yang bisa dilakukan pada current state
-        # findMoves sekarang menerima dictionary (currentState)
-        moves = findMoves(currentState) 
-
+        # Ambil state tuple, ubah ke matriks list, lalu kirim ke findMoves
+        currentStateMatrix = tupleToState(state_tuple)
+        moves = findMoves({"state": currentStateMatrix}) # findMoves sekarang bekerja dengan matriks list
+        
         pathList = []
-            
         for i in currentState["path"]:
             pathList.append(i)
 
-        pathList.append(currentState["state"])
-
+        pathList.append(state_tuple) # state_tuple ditambahkan ke path
+        
         # Menambahkan move dan nilai heuristik yang dihitung ke antrian
-        for move in moves:
-            newMove = copy.deepcopy(move)
-            # 'move' dari findMoves adalah state ([[]]), bukan dictionary, 
-            # sehingga langsung bisa dipakai sebagai newMove (state)
+        for move_matrix in moves:
+            # move_matrix adalah matriks list 3x3
+            newMoveTuple = stateToTuple(move_matrix) # KONVERSI KE TUPLE
             
-            frontier.append({"state": newMove, "heuristic": countHeuristic(newMove, goalState), "path": pathList})
+            # State yang masuk ke frontier adalah TUPLE
+            frontier.append({"state": newMoveTuple, 
+                             "heuristic": countHeuristic(move_matrix, goalState), # Hitung heuristik dari matriks
+                             "path": pathList})
 
         # Disortir sehingga nilai berurut dari nilai heuristik terkecil
         frontier.sort(key=lambda x: x["heuristic"])
 
     winState = False
 
-    if (currentState["state"] == goalState):
+    if (currentState["state"] == goalStateTuple):
         winState = True
     else:
         winState = False
@@ -215,42 +251,45 @@ def BestFirstSearch(initialState, goalState) -> dict:
     frontEndConverted = convertToFrontEnd(steps)
     convertedMoves = convertFrontEndToMoves(frontEndConverted)
 
+    # Output content sekarang berisi TUPLE, tapi Flask akan mengkonversinya ke list saat jsonify
     return {"winState": winState, "content": convertedMoves}
 
-def countHeuristic(currentState, goalState) -> int:
+def countHeuristic(currentStateMatrix, goalStateMatrix) -> int:
+    # Fungsi ini sekarang menerima MATRIKS LIST (tidak perlu konversi di awal)
+    
     heuristic = 0
     for num in range(1,9):
         currentFound = None
-        for i in range(len(currentState)):
-            for j in range(len(currentState[i])):
-                if currentState[i][j] == num:
+        for i in range(len(currentStateMatrix)):
+            for j in range(len(currentStateMatrix[i])):
+                if currentStateMatrix[i][j] == num:
                     currentFound = (i, j)
                     break
             if currentFound:
                 break
 
         goalFound = None
-        for i in range(len(goalState)):
-            for j in range(len(goalState[i])):
-                if goalState[i][j] == num:
+        for i in range(len(goalStateMatrix)):
+            for j in range(len(goalStateMatrix[i])):
+                if goalStateMatrix[i][j] == num:
                     goalFound = (i, j)
                     break
             if goalFound:
                 break
 
-        # Manhattan Distance
+        # Manhattan Distance (Akses tuple aman: [0] dan [1] adalah integer)
         temp = abs(goalFound[0] - currentFound[0]) + abs(goalFound[1] - currentFound[1])
         heuristic += temp
         
     return heuristic
     
-def findMoves(currentState) -> list[list[list[int]]]:
-    # Hapus goalState di sini karena tidak digunakan, hanya sisa testing
+def findMoves(currentStateDict) -> list[list[list[int]]]:
+    # Menerima dictionary {"state": matrix}
     moves = []
-    temp = copy.deepcopy(currentState["state"])
+    temp = copy.deepcopy(currentStateDict["state"]) # Ambil state matrix
 
     foundZero = None
-    # Logika mencari 0... (sama seperti kode asli Anda)
+    # Logika mencari 0...
     for i in range(len(temp)):
         for j in range(len(temp[i])):
             if temp[i][j] == 0:
@@ -260,9 +299,10 @@ def findMoves(currentState) -> list[list[list[int]]]:
             break
     
     # [x - 1] [y] (UP)
+    # Semua akses ke 'foundZero' menggunakan [0] dan [1] (integer) sudah benar
     item1 = foundZero[0] - 1
     if item1 >= 0:
-        temp1 = copy.deepcopy(currentState["state"])
+        temp1 = copy.deepcopy(currentStateDict["state"])
         store = temp1[foundZero[0]][foundZero[1]]
         temp1[foundZero[0]][foundZero[1]] = temp1[item1][foundZero[1]]
         temp1[item1][foundZero[1]] = store
@@ -271,7 +311,7 @@ def findMoves(currentState) -> list[list[list[int]]]:
     # [x + 1] [y] (DOWN)
     item2 = foundZero[0] + 1
     if item2 <= 2:
-        temp2 = copy.deepcopy(currentState["state"])
+        temp2 = copy.deepcopy(currentStateDict["state"])
         store = temp2[foundZero[0]][foundZero[1]]
         temp2[foundZero[0]][foundZero[1]] = temp2[item2][foundZero[1]]
         temp2[item2][foundZero[1]] = store
@@ -280,7 +320,7 @@ def findMoves(currentState) -> list[list[list[int]]]:
     # [x] [y - 1] (LEFT)
     item3 = foundZero[1] - 1
     if item3 >= 0:
-        temp3 = copy.deepcopy(currentState["state"])
+        temp3 = copy.deepcopy(currentStateDict["state"])
         store = temp3[foundZero[0]][foundZero[1]]
         temp3[foundZero[0]][foundZero[1]] = temp3[foundZero[0]][item3]
         temp3[foundZero[0]][item3] = store
@@ -289,7 +329,7 @@ def findMoves(currentState) -> list[list[list[int]]]:
     # [x] [y + 1] (RIGHT)
     item4 = foundZero[1] + 1
     if item4 <= 2:
-        temp4 = copy.deepcopy(currentState["state"])
+        temp4 = copy.deepcopy(currentStateDict["state"])
         store = temp4[foundZero[0]][foundZero[1]]
         temp4[foundZero[0]][foundZero[1]] = temp4[foundZero[0]][item4]
         temp4[foundZero[0]][item4] = store
@@ -359,6 +399,15 @@ def handle_puzzle_request():
     """
     try:
         data = request.get_json()
+        
+        # --- Pengecekan Kualitas JSON (PENTING!) ---
+        if data is None:
+            return jsonify({
+                "error": "Permintaan harus berisi JSON yang valid.",
+                "details": "Pastikan Content-Type: application/json dan format body JSON sudah benar (semua key dikelilingi double quotes)."
+            }), 400
+        
+        # --- Melanjutkan logika ---
         action = data.get('action') 
         
         goalState = [
@@ -371,8 +420,8 @@ def handle_puzzle_request():
         if action == 'solve':
             initial_state = data.get('initialState')
             
-            if not initial_state:
-                return jsonify({"error": "Initial state diperlukan untuk solving."}), 400
+            if not initial_state or not isinstance(initial_state, list):
+                return jsonify({"error": "Format initialState tidak valid."}), 400
 
             # Panggil fungsi solver inti Anda
             result = BestFirstSearch(initial_state, goalState)
@@ -380,6 +429,18 @@ def handle_puzzle_request():
             # Konversi MoveEnum ke string ("LEFT", "RIGHT", dll.) sebelum dikirim
             for step in result["content"]:
                 step["moves"] = [move.name for move in step["moves"]]
+                
+                # PENTING: Ubah kembali state tuple di output ke matriks list
+                step["state"] = tupleToState(step["state"]) 
+                
+                # Ubah path tuple ke matriks list
+                if "frontEndPath" in step:
+                    step["frontEndPath"] = [tupleToState(t) for t in step["frontEndPath"]]
+
+
+            # PENTING: Ubah kembali state tuple di output steps ke matriks list
+            for step in result["content"]:
+                step["state"] = tupleToState(step["state"])
             
             return jsonify(result)
             
@@ -387,7 +448,9 @@ def handle_puzzle_request():
         elif action == 'generate':
             choice_num = data.get('choiceNum', 7) 
             
-            # Panggil fungsi generator inti Anda
+            if not isinstance(choice_num, int):
+                return jsonify({"error": "choiceNum harus berupa angka integer."}), 400
+            
             new_state = getInitialState(choice_num)
             
             return jsonify({
@@ -397,8 +460,12 @@ def handle_puzzle_request():
         return jsonify({"error": "Aksi tidak dikenal. Gunakan 'solve' atau 'generate'."}), 400
 
     except Exception as e:
-        # Menangani error umum
-        return jsonify({"error": f"Internal Server Error: {str(e)}"}), 500
+        print(f"FATAL ERROR: {str(e)}") # Mencetak error ke log Vercel untuk debugging
+        return jsonify({
+            "error": "Internal Server Error saat memproses permintaan.",
+            "details": str(e), 
+            "hint": "Cek log Vercel Anda, error ini sering disebabkan oleh list/tuple yang diakses dengan indeks string."
+        }), 500
 
 # Perhatikan: Blok 'if __name__ == "__main__": main()' yang asli sudah dihapus!
 # Vercel akan menjalankan 'app' secara otomatis.
