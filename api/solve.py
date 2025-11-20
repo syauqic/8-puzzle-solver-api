@@ -19,18 +19,16 @@ class MoveEnum(Enum):
     NONE = 5
 
 # =========================================================
-# FUNGSI BARU UNTUK KONVERSI STATE
+# FUNGSI BARU UNTUK KONVERSI STATE (TETAP SAMA)
 # =========================================================
 
 def stateToTuple(state_matrix: list[list[int]]) -> tuple:
     """Mengubah matriks list 3x3 menjadi tuple 1D untuk perbandingan yang aman."""
-    # List comprehension untuk membuat list datar, lalu konversi ke tuple
     flat_list = [item for sublist in state_matrix for item in sublist]
     return tuple(flat_list)
 
 def tupleToState(state_tuple: tuple) -> list[list[int]]:
     """Mengubah tuple 1D kembali menjadi matriks list 3x3."""
-    # Memastikan tuple berukuran 9 elemen
     if len(state_tuple) != 9:
         raise ValueError("Tuple harus memiliki 9 elemen untuk konversi 3x3.")
         
@@ -58,8 +56,7 @@ def convertFrontEndToMoves(bfsList) -> dict:
     for step in bfsList[1:]:
         moves = []
         
-        # frontEndPath berisi state tuple yang dilalui
-        # item terakhir di frontEndPath adalah state tujuan langkah ini
+        # frontEndPath hanya berisi satu state tujuan (karena sudah path terpendek)
         for item in step["frontEndPath"]:
             move = beforeAfterToMove(prevMove, item)
             moves.append(move)
@@ -73,10 +70,8 @@ def beforeAfterToMove(before_tuple, after_tuple):
     """Menghitung arah pergerakan (MoveEnum) dari state sebelum ke state sesudah."""
     # DARI TUPLE KE MATRIKS LIST
     before = tupleToState(before_tuple)
-    after = tupleToState(after_tuple)
+    # after tidak perlu diubah karena hanya dipakai di perbandingan tuple di bawah
     
-    moves = []
-
     # Cari posisi 0 ('blank tile') di state sebelumnya
     foundZero = None
     for i in range(len(before)):
@@ -122,84 +117,55 @@ def beforeAfterToMove(before_tuple, after_tuple):
         possible_moves.append({"Move": MoveEnum.RIGHT, "State": temp})
         
     for move in possible_moves:
-        # PENTING: Konversi State di move menjadi tuple untuk perbandingan yang aman
+        # Konversi State di move menjadi tuple untuk perbandingan yang aman
         if stateToTuple(move["State"]) == after_tuple:
             return move["Move"]
             
     return MoveEnum.NONE
     
 def convertToFrontEnd(bfsList) -> list:
-    """Mengisi 'frontEndPath' (langkah-langkah perantara) untuk animasi frontend."""
+    """Mengambil path solusi lengkap dari langkah terakhir yang mencapai goal."""
     frontEndList = []
 
-    for index in range(1, len(bfsList)):
-        # Ambil state matriks dari langkah sebelumnya
-        currentStateMatrix = tupleToState(bfsList[index - 1]["state"])
-        
-        # Hasilkan semua state yang mungkin dari state sebelumnya
-        possibleMovesMatrix = findMoves({"state": currentStateMatrix})
-        
-        # Konversi semua possible state matrix menjadi tuple untuk perbandingan
-        possible_states_tuple = [stateToTuple(s) for s in possibleMovesMatrix]
-        
-        current_state_tuple = bfsList[index]["state"]
+    # 1. Cek apakah BFS menemukan solusi
+    if not bfsList or bfsList[-1]["heuristic"] != 0:
+        return []
 
-        # Jika langkah saat ini ADALAH salah satu langkah langsung, simpan saja langkah tersebut
-        if (current_state_tuple in possible_states_tuple): 
-            bfsList[index]["frontEndPath"] = [current_state_tuple]
-        # Jika bukan, lakukan backtrack untuk mendapatkan semua langkah perantara
-        else:
-            bfsList[index]["frontEndPath"] = backTrack(bfsList[index - 1], bfsList[index])
+    # 2. Langkah terakhir berisi path lengkap ke goal state
+    final_step = bfsList[-1]
+    
+    # Path yang benar: [state awal, step 1, step 2, ..., goal state]
+    # path: list of TUPLE state
+    # Tambahkan state awal (path[0] belum ada) dan goal state
+    final_path_tuples = final_step["path"] + [final_step["state"]] 
 
-        frontEndList.append(bfsList[index])
+    # 3. Konversi path menjadi format list step frontend
+    for state_tuple in final_path_tuples:
+        # Tambahkan state ke list output
+        step_entry = {
+            "state": state_tuple,
+            # frontEndPath hanya berisi state tujuan langkah ini (untuk animasi 1 langkah)
+            "frontEndPath": [state_tuple] 
+        }
+        frontEndList.append(step_entry)
 
     return frontEndList
 
-def backTrack(start, end):
-    """Menghitung path terpendek dari start ke end state berdasarkan path yang tersimpan di BFS."""
-    # start["path"] dan end["path"] berisi list of TUPLE state
-    # Cari irisan path
-    common_path_items = [x for x in start["path"] if x in end["path"]] # Perbandingan aman dengan tuple
-
-    frontEndPath = []
-
-    startPath = list(start["path"])
-    endPath = list(end["path"])
-
-    if not common_path_items:
-        # Seharusnya tidak terjadi jika BFS sukses, tapi sebagai fallback
-        return [end["state"]] 
-
-    # Ambil titik temu terakhir (common_path_items[len(common_path_items) - 1])
-    common_item = common_path_items[-1]
+# FUNGSI backTrack LAMA DIHAPUS karena menjadi penyebab error/kompleksitas path.
+# def backTrack(start, end): ... 
     
-    # Cari indeks titik temu di kedua path
-    startIndex = startPath.index(common_item)
-    endIndex = endPath.index(common_item)
-
-    # Langkah dari START menuju titik temu (dibalik)
-    for i in range(len(startPath) - 1, startIndex - 1, -1):
-        frontEndPath.append(startPath[i])
-        
-    # Langkah dari titik temu menuju END
-    for i in range(endIndex + 1, len(endPath), 1):
-        frontEndPath.append(endPath[i])
-        
-    frontEndPath.append(end["state"])
-    
-    return frontEndPath
-        
 def BestFirstSearch(initialState, goalState) -> dict:
     """Implementasi Best-First Search (Greedy BFS) dengan Manhattan Distance."""
     frontier = []
     explored = set() # Menggunakan set untuk cek eksplorasi O(1)
-    steps = []
+    steps = [] # Ini akan kita isi dengan path solusi yang benar
 
     # KONVERSI KE TUPLE SAAT AWAL
     initialStateTuple = stateToTuple(initialState)
     goalStateTuple = stateToTuple(goalState)
     
     # State yang disimpan di frontier adalah TUPLE
+    # path: menyimpan path dari initial state ke state saat ini, path kosong untuk initial state
     frontier.append({
         "state": initialStateTuple, 
         "heuristic": countHeuristic(initialState, goalState), 
@@ -208,7 +174,10 @@ def BestFirstSearch(initialState, goalState) -> dict:
     
     max_exploration_limit = 10000 
     
+    # PENTING: Untuk Best-First Search, kita hanya menyimpan path di node yang dipilih (currentState)
+    
     while len(frontier) > 0:
+        # Pop elemen pertama (heuristik terendah)
         currentState = frontier.pop(0)
         state_tuple = currentState["state"]
         
@@ -219,24 +188,26 @@ def BestFirstSearch(initialState, goalState) -> dict:
 
         # Batasan jumlah langkah
         if (len(explored) >= max_exploration_limit): 
-             break
+            break
 
-        steps.append(currentState)
+        # steps tidak lagi digunakan untuk menampung explored, tapi path solution
         
         # Cek apabila sudah mencapai goal (AMAN: perbandingan tuple)
         if (state_tuple == goalStateTuple):
+            # Jika goal tercapai, tambahkan node terakhir ini ke steps dan keluar
+            steps.append(currentState)
             break
         
         # Ambil state tuple, ubah ke matriks list, lalu kirim ke findMoves
         currentStateMatrix = tupleToState(state_tuple)
         moves = findMoves({"state": currentStateMatrix}) # findMoves sekarang bekerja dengan matriks list
         
+        # Path baru untuk node tetangga: Path lama + state saat ini
         pathList = list(currentState["path"])
-        pathList.append(state_tuple) # state_tuple ditambahkan ke path
-        
+        pathList.append(state_tuple) # Tambahkan state saat ini ke path
+
         # Menambahkan move dan nilai heuristik yang dihitung ke antrian
         for move_matrix in moves:
-            # move_matrix adalah matriks list 3x3
             newMoveTuple = stateToTuple(move_matrix) # KONVERSI KE TUPLE
             
             # State yang masuk ke frontier adalah TUPLE
@@ -244,7 +215,7 @@ def BestFirstSearch(initialState, goalState) -> dict:
                 frontier.append({
                     "state": newMoveTuple, 
                     "heuristic": countHeuristic(move_matrix, goalState), # Hitung heuristik dari matriks
-                    "path": pathList
+                    "path": pathList # Path baris yang benar
                 })
 
         # Disortir sehingga nilai berurut dari nilai heuristik terkecil
@@ -252,7 +223,7 @@ def BestFirstSearch(initialState, goalState) -> dict:
 
     winState = (state_tuple == goalStateTuple)
 
-    # Jika pencarian sukses, konversi path ke format yang mudah diproses frontend
+    # Hanya jika winState=True, kita memiliki steps (berisi 1 item: goal state dengan path lengkap)
     frontEndConverted = convertToFrontEnd(steps)
     convertedMoves = convertFrontEndToMoves(frontEndConverted)
 
