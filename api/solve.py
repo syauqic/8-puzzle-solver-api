@@ -301,7 +301,13 @@ def findMoves(currentStateDict) -> list[list[list[int]]]:
     return moves
 
 def getInitialState(choice) -> list[list[int]]:
-    """Mengambil state awal berdasarkan pilihan angka."""
+    """
+    Mengambil state awal berdasarkan pilihan angka.
+    
+    MODIFIKASI: 
+    Jika choice=0 (generate acak), ia akan secara acak menghasilkan 
+    SOLVABLE (50%) atau UNSOLVEABLE (50%).
+    """
     
     goalState = [
         [1, 2, 3],
@@ -321,7 +327,7 @@ def getInitialState(choice) -> list[list[int]]:
 
     result = []
     
-    # Pilihan state puzzle Anda
+    # Pilihan state puzzle Anda (TETAP SAMA)
     initial_states = {
         1: [[1, 2, 3], [4, 5, 6], [7, 0, 8]], 2: [[1, 2, 3], [4, 5, 6], [0, 7, 8]],
         3: [[1, 2, 3], [4, 0, 6], [7, 5, 8]], 4: [[1, 3, 6], [4, 0, 2], [7, 5, 8]],
@@ -335,17 +341,36 @@ def getInitialState(choice) -> list[list[int]]:
         19: [[6, 4, 7], [8, 5, 0], [3, 2, 1]], 20: [[1, 8, 2], [0, 4, 3], [7, 6, 5]]
     }
     
+    # Ambil state dari preset jika 'choice' ada (1-20)
     result = initial_states.get(choice, initial_states[20])
 
-    # Logika untuk menghasilkan state acak yang terpecahkan jika 'choice' tidak ada
+    # Logika untuk menghasilkan state acak yang terpecahkan (SEBELUMNYA) 
+    # ATAU state acak BEBAS (SOLVABLE/UNSOLVEABLE)
     if choice not in initial_states or choice == 0: 
-        while True:
-            numbers = list(range(9))
-            random.shuffle(numbers)
-            temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
-            if is_solvable(temp_state):
-                result = temp_state
-                break
+        # Kita akan menggunakan choice=0 sebagai mode generate BEBAS (bisa solvable/unsolveable)
+
+        # 1. Acak murni (50% solvable, 50% unsolveable)
+        numbers = list(range(9))
+        random.shuffle(numbers)
+        temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        
+        # 2. Cek apakah JS meminta yang solvable saja
+        # ASUMSI: Jika JS ingin yang *solvable* saja, ia akan mengirim choice_num: 100 (atau angka besar lainnya)
+        # Karena JS Anda sebelumnya hanya mengirim choice_num: 0, kita asumsikan sekarang 0 adalah "BEBAS".
+        # JIKA pilihan Anda sebelumnya sudah benar (hanya ingin solvable), gunakan logika:
+        
+        # --- LOGIKA ACAR BARU (50% Solvable, 50% Unsolveable) ---
+        result = temp_state
+        
+        # --- Pilihan: Jika Anda tetap ingin memastikan Solvable jika choice=100 ---
+        # if choice == 100: # Jika ada kode khusus dari JS untuk minta yang solvable
+        #     while not is_solvable(temp_state):
+        #         random.shuffle(numbers)
+        #         temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        #     result = temp_state
+        
+        # KARENA Anda ingin yang unsolveable muncul, kita **HAPUS** loop 'while is_solvable'
+        # saat choice == 0. Jadi, hasil acak murni (temp_state) langsung dikembalikan.
 
     return result
 
