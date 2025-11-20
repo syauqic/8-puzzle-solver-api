@@ -354,9 +354,9 @@ def getInitialState(choice) -> list[list[int]]:
         #    Jika di-comment, menghasilkan SOLVABLE (50%) dan UNSOLVEABLE (50%).
         # =========================================================
         
-        while not is_solvable(temp_state):
-            random.shuffle(numbers)
-            temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        # while not is_solvable(temp_state):
+        #     random.shuffle(numbers)
+        #     temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
         
         # =========================================================
         # 🔑 AKHIR MODE PRESENTASI
