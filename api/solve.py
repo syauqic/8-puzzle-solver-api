@@ -1,6 +1,8 @@
 import copy
 from enum import Enum
 import random
+# PENTING: Import modul time untuk mengukur waktu eksekusi
+import time 
 # Tambahan untuk API (PENTING!)
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -70,7 +72,6 @@ def beforeAfterToMove(before_tuple, after_tuple):
     """Menghitung arah pergerakan (MoveEnum) dari state sebelum ke state sesudah."""
     # DARI TUPLE KE MATRIKS LIST
     before = tupleToState(before_tuple)
-    # after tidak perlu diubah karena hanya dipakai di perbandingan tuple di bawah
     
     # Cari posisi 0 ('blank tile') di state sebelumnya
     foundZero = None
@@ -124,10 +125,15 @@ def beforeAfterToMove(before_tuple, after_tuple):
     return MoveEnum.NONE
     
 def convertToFrontEnd(bfsList) -> list:
-    """Mengambil path solusi lengkap dari langkah terakhir yang mencapai goal."""
+    """
+    MENGGANTIKAN FUNGSI backTrack.
+    Mengambil path solusi lengkap dari langkah terakhir yang mencapai goal, 
+    memastikan urutan langkah runtut.
+    """
     frontEndList = []
 
     # 1. Cek apakah BFS menemukan solusi
+    # steps hanya berisi 1 item (goal state) jika solusi ditemukan
     if not bfsList or bfsList[-1]["heuristic"] != 0:
         return []
 
@@ -135,13 +141,10 @@ def convertToFrontEnd(bfsList) -> list:
     final_step = bfsList[-1]
     
     # Path yang benar: [state awal, step 1, step 2, ..., goal state]
-    # path: list of TUPLE state
-    # Tambahkan state awal (path[0] belum ada) dan goal state
     final_path_tuples = final_step["path"] + [final_step["state"]] 
 
     # 3. Konversi path menjadi format list step frontend
     for state_tuple in final_path_tuples:
-        # Tambahkan state ke list output
         step_entry = {
             "state": state_tuple,
             # frontEndPath hanya berisi state tujuan langkah ini (untuk animasi 1 langkah)
@@ -151,21 +154,23 @@ def convertToFrontEnd(bfsList) -> list:
 
     return frontEndList
 
-# FUNGSI backTrack LAMA DIHAPUS karena menjadi penyebab error/kompleksitas path.
-# def backTrack(start, end): ... 
+# Fungsi backTrack lama telah dihapus.
     
 def BestFirstSearch(initialState, goalState) -> dict:
     """Implementasi Best-First Search (Greedy BFS) dengan Manhattan Distance."""
+    
+    # --- PENGUKURAN WAKTU DIMULAI ---
+    startTime = time.time()
+    # ---------------------------------
+    
     frontier = []
-    explored = set() # Menggunakan set untuk cek eksplorasi O(1)
-    steps = [] # Ini akan kita isi dengan path solusi yang benar
+    explored = set()
+    steps = [] 
 
     # KONVERSI KE TUPLE SAAT AWAL
     initialStateTuple = stateToTuple(initialState)
     goalStateTuple = stateToTuple(goalState)
     
-    # State yang disimpan di frontier adalah TUPLE
-    # path: menyimpan path dari initial state ke state saat ini, path kosong untuk initial state
     frontier.append({
         "state": initialStateTuple, 
         "heuristic": countHeuristic(initialState, goalState), 
@@ -173,72 +178,71 @@ def BestFirstSearch(initialState, goalState) -> dict:
     })
     
     max_exploration_limit = 10000 
-    
-    # PENTING: Untuk Best-First Search, kita hanya menyimpan path di node yang dipilih (currentState)
-    
+    state_tuple = initialStateTuple # Inisialisasi awal untuk memastikan state_tuple ada
+
     while len(frontier) > 0:
-        # Pop elemen pertama (heuristik terendah)
         currentState = frontier.pop(0)
         state_tuple = currentState["state"]
         
-        # Cek kalau current state sudah pernah di cek sebelumnya (AMAN: perbandingan tuple)
         if state_tuple in explored:
             continue
         explored.add(state_tuple)
 
-        # Batasan jumlah langkah
         if (len(explored) >= max_exploration_limit): 
             break
-
-        # steps tidak lagi digunakan untuk menampung explored, tapi path solution
         
-        # Cek apabila sudah mencapai goal (AMAN: perbandingan tuple)
         if (state_tuple == goalStateTuple):
-            # Jika goal tercapai, tambahkan node terakhir ini ke steps dan keluar
+            # Jika goal tercapai, simpan node terakhir ini dan HENTIKAN
             steps.append(currentState)
             break
         
-        # Ambil state tuple, ubah ke matriks list, lalu kirim ke findMoves
         currentStateMatrix = tupleToState(state_tuple)
-        moves = findMoves({"state": currentStateMatrix}) # findMoves sekarang bekerja dengan matriks list
+        moves = findMoves({"state": currentStateMatrix})
         
         # Path baru untuk node tetangga: Path lama + state saat ini
         pathList = list(currentState["path"])
-        pathList.append(state_tuple) # Tambahkan state saat ini ke path
+        pathList.append(state_tuple) 
 
-        # Menambahkan move dan nilai heuristik yang dihitung ke antrian
         for move_matrix in moves:
-            newMoveTuple = stateToTuple(move_matrix) # KONVERSI KE TUPLE
+            newMoveTuple = stateToTuple(move_matrix)
             
-            # State yang masuk ke frontier adalah TUPLE
-            if newMoveTuple not in explored: # Cek jika belum dieksplorasi
+            if newMoveTuple not in explored: 
                 frontier.append({
                     "state": newMoveTuple, 
-                    "heuristic": countHeuristic(move_matrix, goalState), # Hitung heuristik dari matriks
-                    "path": pathList # Path baris yang benar
+                    "heuristic": countHeuristic(move_matrix, goalState),
+                    "path": pathList 
                 })
 
-        # Disortir sehingga nilai berurut dari nilai heuristik terkecil
         frontier.sort(key=lambda x: x["heuristic"])
+        
+    # --- PENGUKURAN WAKTU SELESAI ---
+    endTime = time.time()
+    executionTime = endTime - startTime
+    # ----------------------------------
 
     winState = (state_tuple == goalStateTuple)
 
-    # Hanya jika winState=True, kita memiliki steps (berisi 1 item: goal state dengan path lengkap)
+    # Hanya jika winState=True, kita memiliki steps yang akan diolah
     frontEndConverted = convertToFrontEnd(steps)
     convertedMoves = convertFrontEndToMoves(frontEndConverted)
+    
+    totalSteps = len(convertedMoves) # Hitung total langkah
 
-    # Output content berisi TUPLE, tapi akan dikonversi ke list saat jsonify di endpoint
-    return {"winState": winState, "content": convertedMoves}
+    # --- RETURN LENGKAP DENGAN WAKTU DAN LANGKAH ---
+    return {
+        "winState": winState, 
+        "content": convertedMoves, 
+        "executionTime": executionTime, 
+        "totalSteps": totalSteps
+    }
 
 def countHeuristic(currentStateMatrix, goalStateMatrix) -> int:
     """Menghitung Heuristik Manhattan Distance."""
-    # Fungsi ini menerima MATRIKS LIST
     heuristic = 0
     for num in range(1, 9): # Hanya tile 1 sampai 8
         currentFound = None
         goalFound = None
         
-        # Cari posisi num di state saat ini
         for r in range(3):
             for c in range(3):
                 if currentStateMatrix[r][c] == num:
@@ -247,7 +251,7 @@ def countHeuristic(currentStateMatrix, goalStateMatrix) -> int:
                     goalFound = (r, c)
         
         if currentFound and goalFound:
-            # Manhattan Distance
+            # Manhattan Distance: |x1 - x2| + |y1 - y2|
             temp = abs(goalFound[0] - currentFound[0]) + abs(goalFound[1] - currentFound[1])
             heuristic += temp
             
@@ -255,7 +259,6 @@ def countHeuristic(currentStateMatrix, goalStateMatrix) -> int:
     
 def findMoves(currentStateDict) -> list[list[list[int]]]:
     """Menghitung semua state tetangga yang mungkin dari state saat ini."""
-    # Menerima dictionary {"state": matrix}
     moves = []
     current_state = currentStateDict["state"]
 
@@ -275,12 +278,11 @@ def findMoves(currentStateDict) -> list[list[list[int]]]:
     r0, c0 = foundZero
 
     # Daftar potensi pergeseran (dr, dc)
-    # (dr, dc) = (row change, col change)
     directions = [
-        (-1, 0, MoveEnum.UP),    # Pindah ke atas (0: r-1, c0) -> Geser tile (r-1, c0) ke bawah
-        ( 1, 0, MoveEnum.DOWN),  # Pindah ke bawah (0: r+1, c0) -> Geser tile (r+1, c0) ke atas
-        ( 0, -1, MoveEnum.LEFT), # Pindah ke kiri (0: r0, c-1) -> Geser tile (r0, c-1) ke kanan
-        ( 0, 1, MoveEnum.RIGHT)  # Pindah ke kanan (0: r0, c+1) -> Geser tile (r0, c+1) ke kiri
+        (-1, 0, MoveEnum.UP), 
+        ( 1, 0, MoveEnum.DOWN),
+        ( 0, -1, MoveEnum.LEFT),
+        ( 0, 1, MoveEnum.RIGHT)
     ]
     
     for dr, dc, _ in directions:
@@ -300,9 +302,7 @@ def findMoves(currentStateDict) -> list[list[list[int]]]:
 
 def getInitialState(choice) -> list[list[int]]:
     """Mengambil state awal berdasarkan pilihan angka."""
-    # Dapatkan state awal dari logic Anda
     
-    # State goal standard
     goalState = [
         [1, 2, 3],
         [4, 5, 6],
@@ -321,35 +321,24 @@ def getInitialState(choice) -> list[list[int]]:
 
     result = []
     
-    # Pilihan state puzzle Anda (sudah dimodifikasi agar lebih rapi)
+    # Pilihan state puzzle Anda
     initial_states = {
-        1: [[1, 2, 3], [4, 5, 6], [7, 0, 8]],
-        2: [[1, 2, 3], [4, 5, 6], [0, 7, 8]],
-        3: [[1, 2, 3], [4, 0, 6], [7, 5, 8]],
-        4: [[1, 3, 6], [4, 0, 2], [7, 5, 8]],
-        5: [[1, 2, 3], [5, 0, 6], [4, 7, 8]],
-        6: [[1, 2, 3], [4, 6, 0], [7, 5, 8]],
-        7: [[1, 3, 6], [5, 0, 2], [4, 7, 8]],
-        8: [[1, 3, 6], [5, 2, 0], [4, 7, 8]],
-        9: [[1, 2, 0], [4, 5, 3], [7, 8, 6]],
-        10: [[1, 0, 3], [4, 2, 6], [7, 5, 8]],
-        11: [[2, 8, 3], [1, 6, 4], [7, 0, 5]],
-        12: [[5, 6, 7], [4, 0, 8], [3, 2, 1]],
-        13: [[1, 6, 2], [5, 7, 3], [0, 4, 8]],
-        14: [[2, 3, 6], [1, 5, 0], [4, 7, 8]],
-        15: [[8, 6, 7], [2, 5, 4], [3, 0, 1]],
-        16: [[4, 1, 3], [7, 2, 5], [0, 8, 6]],
-        17: [[1, 3, 6], [4, 8, 2], [7, 0, 5]],
-        18: [[4, 5, 6], [1, 2, 3], [7, 8, 0]],
-        19: [[6, 4, 7], [8, 5, 0], [3, 2, 1]],
-        20: [[1, 8, 2], [0, 4, 3], [7, 6, 5]] # Default case added to the map
+        1: [[1, 2, 3], [4, 5, 6], [7, 0, 8]], 2: [[1, 2, 3], [4, 5, 6], [0, 7, 8]],
+        3: [[1, 2, 3], [4, 0, 6], [7, 5, 8]], 4: [[1, 3, 6], [4, 0, 2], [7, 5, 8]],
+        5: [[1, 2, 3], [5, 0, 6], [4, 7, 8]], 6: [[1, 2, 3], [4, 6, 0], [7, 5, 8]],
+        7: [[1, 3, 6], [5, 0, 2], [4, 7, 8]], 8: [[1, 3, 6], [5, 2, 0], [4, 7, 8]],
+        9: [[1, 2, 0], [4, 5, 3], [7, 8, 6]], 10: [[1, 0, 3], [4, 2, 6], [7, 5, 8]],
+        11: [[2, 8, 3], [1, 6, 4], [7, 0, 5]], 12: [[5, 6, 7], [4, 0, 8], [3, 2, 1]],
+        13: [[1, 6, 2], [5, 7, 3], [0, 4, 8]], 14: [[2, 3, 6], [1, 5, 0], [4, 7, 8]],
+        15: [[8, 6, 7], [2, 5, 4], [3, 0, 1]], 16: [[4, 1, 3], [7, 2, 5], [0, 8, 6]],
+        17: [[1, 3, 6], [4, 8, 2], [7, 0, 5]], 18: [[4, 5, 6], [1, 2, 3], [7, 8, 0]],
+        19: [[6, 4, 7], [8, 5, 0], [3, 2, 1]], 20: [[1, 8, 2], [0, 4, 3], [7, 6, 5]]
     }
     
-    # Ambil state berdasarkan pilihan, default ke 20 jika tidak ditemukan
     result = initial_states.get(choice, initial_states[20])
 
     # Logika untuk menghasilkan state acak yang terpecahkan jika 'choice' tidak ada
-    if choice not in initial_states or choice == 0: # Gunakan 'choice == 0' untuk meminta random state
+    if choice not in initial_states or choice == 0: 
         while True:
             numbers = list(range(9))
             random.shuffle(numbers)
@@ -366,20 +355,16 @@ def getInitialState(choice) -> list[list[int]]:
 
 @app.route('/api/solve', methods=['POST'])
 def handle_puzzle_request():
-    """
-    Menangani request SOLVE dan GENERATE dari frontend.
-    """
+    """Menangani request SOLVE dan GENERATE dari frontend."""
     try:
         data = request.get_json()
         
-        # --- Pengecekan Kualitas JSON (PENTING!) ---
         if data is None:
             return jsonify({
                 "error": "Permintaan harus berisi JSON yang valid.",
                 "details": "Pastikan Content-Type: application/json dan format body JSON sudah benar."
             }), 400
         
-        # --- Melanjutkan logika ---
         action = data.get('action') 
         
         goalState = [
@@ -411,25 +396,27 @@ def handle_puzzle_request():
                 
                 # Konversi path tuple ke matriks list
                 if "frontEndPath" in step_copy:
-                    # frontEndPath berisi state tuple, ubah ke matriks list
                     step_copy["frontEndPath"] = [tupleToState(t) for t in step_copy["frontEndPath"]]
                 
-                # Hapus path (list panjang berisi state) agar payload tidak terlalu besar
+                # Hapus path
                 if "path" in step_copy:
                     del step_copy["path"]
                     
                 final_content.append(step_copy)
 
+            # --- FINAL RESULT TERMASUK WAKTU DAN LANGKAH ---
             final_result = {
                 "winState": result.get("winState", False),
-                "content": final_content
+                "content": final_content,
+                "executionTime": result.get("executionTime", 0),  # Ditambahkan
+                "totalSteps": result.get("totalSteps", 0)        # Ditambahkan
             }
             
             return jsonify(final_result)
             
         # --- 2. AKSI GENERATE ---
         elif action == 'generate':
-            choice_num = data.get('choiceNum', 20) # Default ke 20
+            choice_num = data.get('choiceNum', 20) 
             
             if not isinstance(choice_num, int):
                 return jsonify({"error": "choiceNum harus berupa angka integer."}), 400
@@ -438,13 +425,12 @@ def handle_puzzle_request():
             
             return jsonify({
                 "initialState": new_state,
-                "goalState": goalState # Opsional: kirim goal state juga
+                "goalState": goalState
             })
 
         return jsonify({"error": "Aksi tidak dikenal. Gunakan 'solve' atau 'generate'."}), 400
 
     except Exception as e:
-        # Mencetak error ke log Vercel untuk debugging
         print(f"FATAL ERROR: {str(e)}") 
         return jsonify({
             "error": "Internal Server Error saat memproses permintaan.",
