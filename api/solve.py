@@ -349,7 +349,7 @@ def getInitialState(choice) -> list[list[int]]:
         temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
         
         # =========================================================
-        # 🔑 MODE PRESENTASI: UNCOMMENT BARIS DI BAWAH INI
+        #    MODE PRESENTASI: UNCOMMENT BARIS DI BAWAH INI
         #    Jika di-uncomment, hanya menghasilkan puzzle SOLVABLE.
         #    Jika di-comment, menghasilkan SOLVABLE (50%) dan UNSOLVEABLE (50%).
         # =========================================================
@@ -359,7 +359,7 @@ def getInitialState(choice) -> list[list[int]]:
         #     temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
         
         # =========================================================
-        # 🔑 AKHIR MODE PRESENTASI
+        #   AKHIR MODE PRESENTASI
         # =========================================================
         
         result = temp_state
