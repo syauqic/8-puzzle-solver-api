@@ -131,11 +131,9 @@ def convertFrontEndToMoves(bfsList) -> list:
         return []
         
     # State awal di langkah 0, diberi MoveEnum.NONE
-    # ### PERBAIKAN 1: Pastikan list tidak kosong sebelum mengakses index 0 ###
     if bfsList: 
         bfsList[0]["moves"] = [MoveEnum.NONE]
     prevMove = bfsList[0]["state"] 
-    # ##########################################################
 
     for step in bfsList[1:]:
         moves = []
@@ -168,7 +166,7 @@ def convertToFrontEnd(steps_from_bfs: list) -> list:
     # path_info akan menampung {state: tuple, heuristic: int}
     path_info = []
 
-    # Inisialisasi State Awal (Parent dari Goal State)
+    # Inisialisasi State Akhir (Goal State)
     current_state_tuple = final_step["state"] # Goal state
     
     # Pastikan goal state sendiri masuk ke dalam daftar dengan nilai heuristiknya
@@ -218,28 +216,33 @@ def BestFirstSearch(initialState, goalState) -> dict:
     startTime = time.time()
     # ---------------------------------
     
-    # ### PERBAIKAN 2: Pindahkan inisialisasi initialHeuristic ke sini ###
-    # Ini memastikan bahwa nilai ini selalu dihitung ulang setiap kali solver dipanggil
-    # dan hanya disimpan untuk keperluan return.
     initialHeuristic = countHeuristic(initialState, goalState) 
-    # ##################################################################
     
     frontier = []
     explored = set()
     steps = [] 
     
+    # ### MODIFIKASI UNTUK POHON PENCARIAN ###
+    # List untuk menyimpan setiap node yang dieksplorasi beserta parent-nya
+    # Parent dari initial state adalah NONE
+    explored_nodes_for_tree = [] 
+    # #######################################
+
     # KONVERSI KE TUPLE SAAT AWAL
     initialStateTuple = stateToTuple(initialState)
     goalStateTuple = stateToTuple(goalState)
     
     frontier.append({
         "state": initialStateTuple, 
-        "heuristic": initialHeuristic, # Gunakan initialHeuristic yang baru dihitung
-        "path": []
+        "heuristic": initialHeuristic, 
+        "path": [],
+        # ### MODIFIKASI UNTUK POHON PENCARIAN ###
+        "parent_state": None # Parent dari state awal adalah None/Kosong
+        # #######################################
     })
     
     max_exploration_limit = 10000 
-    state_tuple = initialStateTuple # Inisialisasi awal untuk memastikan state_tuple ada
+    state_tuple = initialStateTuple 
 
     while len(frontier) > 0:
         currentState = frontier.pop(0)
@@ -249,11 +252,20 @@ def BestFirstSearch(initialState, goalState) -> dict:
             continue
         explored.add(state_tuple)
 
+        # ### MODIFIKASI UNTUK POHON PENCARIAN: Simpan node yang dieksplorasi ###
+        # Simpan informasi node ke list pohon
+        explored_nodes_for_tree.append({
+            "state": state_tuple,
+            "heuristic": currentState["heuristic"],
+            "parent": currentState.get("parent_state"), # Ambil parent yang sudah ada
+            # Kita tidak perlu menyimpan path lengkap di sini, cukup parent_state
+        })
+        # ######################################################################
+        
         if (len(explored) >= max_exploration_limit): 
             break
         
         if (state_tuple == goalStateTuple):
-            # Jika goal tercapai, simpan node terakhir ini dan HENTIKAN
             steps.append(currentState)
             break
         
@@ -271,7 +283,10 @@ def BestFirstSearch(initialState, goalState) -> dict:
                 frontier.append({
                     "state": newMoveTuple, 
                     "heuristic": countHeuristic(move_matrix, goalState),
-                    "path": pathList 
+                    "path": pathList,
+                    # ### MODIFIKASI UNTUK POHON PENCARIAN: Set parent ###
+                    "parent_state": state_tuple # Parent dari node baru adalah node saat ini
+                    # #################################################
                 })
 
         frontier.sort(key=lambda x: x["heuristic"])
@@ -283,25 +298,22 @@ def BestFirstSearch(initialState, goalState) -> dict:
 
     winState = (state_tuple == goalStateTuple)
 
-    # Hanya jika winState=True, kita memiliki steps yang akan diolah
     frontEndConverted = convertToFrontEnd(steps)
     convertedMoves = convertFrontEndToMoves(frontEndConverted)
     
     totalSteps = len(convertedMoves) 
-
-    # --- RETURN LENGKAP DENGAN WAKTU DAN LANGKAH ---
+    
+    # --- RETURN LENGKAP DENGAN DATA POHON PENCARIAN BARU ---
     return {
         "winState": winState, 
         "content": convertedMoves, 
         "executionTime": executionTime, 
         "totalSteps": totalSteps,
-        # ### PERBAIKAN 3: Menggunakan initialHeuristic yang dihitung di awal fungsi ###
-        "initialHeuristic": initialHeuristic
+        "initialHeuristic": initialHeuristic,
+        # ### MODIFIKASI: KEMBALIKAN DATA POHON BARU ###
+        "exploredTree": explored_nodes_for_tree
+        # ##############################################
     }
-
-# ###############################################################
-# ### PERBAIKAN: Hapus inisialisasi di luar fungsi BestFirstSearch.initialHeuristic = 0 ###
-# ###############################################################
     
 def findMoves(currentStateDict) -> list[list[list[int]]]:
     """Menghitung semua state tetangga yang mungkin dari state saat ini."""
@@ -393,13 +405,11 @@ def getInitialState(choice) -> list[list[int]]:
         
         # =========================================================
         # 🔑 MODE PRESENTASI: UNCOMMENT BARIS DI BAWAH INI
-        #     Jika di-uncomment, hanya menghasilkan puzzle SOLVABLE.
-        #     Jika di-comment, menghasilkan SOLVABLE (50%) dan UNSOLVEABLE (50%).
         # =========================================================
         
         # while not is_solvable(temp_state):
-        #     random.shuffle(numbers)
-        #     temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        #     random.shuffle(numbers)
+        #     temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
         
         # =========================================================
         # 🔑 AKHIR MODE PRESENTASI
@@ -419,7 +429,6 @@ def handle_puzzle_request():
     try:
         data = request.get_json()
         
-        # ### PERBAIKAN INDENTASI 4: Body utama API Endpoint ###
         if data is None:
             return jsonify({
                 "error": "Permintaan harus berisi JSON yang valid.",
@@ -441,41 +450,48 @@ def handle_puzzle_request():
             if not initial_state or not isinstance(initial_state, list):
                 return jsonify({"error": "Format initialState tidak valid. Harus berupa matriks list 3x3."}), 400
 
-            # ### PERBAIKAN: Hapus baris ini karena sudah dipindahkan ke BestFirstSearch ###
-            # BestFirstSearch.initialHeuristic = countHeuristic(initial_state, goalState)
-            
             # Panggil fungsi solver inti
             result = BestFirstSearch(initial_state, goalState)
             
-            # Konversi Enum dan Tuple kembali ke string dan List untuk JSON
+            # --- KONVERSI DATA SOLUSI (content) ---
             final_content = []
             for step in result.get("content", []):
                 step_copy = copy.deepcopy(step)
                 
-                # Konversi MoveEnum ke string
                 step_copy["moves"] = [move.name for move in step_copy["moves"]]
-                
-                # Konversi state tuple ke matriks list
                 step_copy["state"] = tupleToState(step_copy["state"]) 
                 
-                # Konversi path tuple ke matriks list
                 if "frontEndPath" in step_copy:
                     step_copy["frontEndPath"] = [tupleToState(t) for t in step_copy["frontEndPath"]]
                 
-                # Hapus path (path tidak perlu dikirim ke frontend)
                 if "path" in step_copy:
                     del step_copy["path"]
                 
                 final_content.append(step_copy)
+                
+            # --- KONVERSI DATA POHON (exploredTree) BARU ---
+            explored_tree_data = []
+            for node in result.get("exploredTree", []):
+                node_copy = copy.deepcopy(node)
+                # Konversi state tuple ke matriks list
+                node_copy["state"] = tupleToState(node_copy["state"])
+                # Parent state (juga tuple) diubah ke list untuk JSON, atau dibiarkan None
+                if node_copy["parent"] is not None:
+                    node_copy["parent"] = tupleToState(node_copy["parent"])
+                
+                explored_tree_data.append(node_copy)
+            # ################################################
 
-            # --- FINAL RESULT TERMASUK WAKTU, LANGKAH, DAN HEURISTIK AWAL ---
+            # --- FINAL RESULT TERMASUK WAKTU, LANGKAH, HEURISTIK, DAN POHON PENCARIAN ---
             final_result = {
                 "winState": result.get("winState", False),
                 "content": final_content,
-                "executionTime": result.get("executionTime", 0),  
-                "totalSteps": result.get("totalSteps", 0),      
-                # ### Mengambil nilai Heuristik awal dari hasil BestFirstSearch ###
-                "initialHeuristic": result.get("initialHeuristic", 0)
+                "executionTime": result.get("executionTime", 0), 
+                "totalSteps": result.get("totalSteps", 0),
+                "initialHeuristic": result.get("initialHeuristic", 0),
+                # ### TAMBAHKAN DATA POHON PENCARIAN ###
+                "exploredTree": explored_tree_data
+                # ######################################
             }
             
             return jsonify(final_result)
@@ -498,9 +514,13 @@ def handle_puzzle_request():
         return jsonify({"error": "Aksi tidak dikenal. Gunakan 'solve' atau 'generate'."}), 400
 
     except Exception as e:
-        print(f"FATAL ERROR: {str(e)}") 
+        # Error handling yang lebih baik
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"FATAL ERROR: {error_trace}") 
         return jsonify({
             "error": "Internal Server Error saat memproses permintaan.",
             "details": str(e), 
-            "hint": "Cek log Vercel Anda, pastikan format input [list[list[int]]] sudah benar."
+            "hint": "Cek log Vercel Anda, pastikan format input [list[list[int]]] sudah benar.",
+            "trace": error_trace
         }), 500
