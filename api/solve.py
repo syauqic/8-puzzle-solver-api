@@ -395,27 +395,27 @@ def getInitialState(choice) -> list[list[int]]:
  # Ambil state dari preset jika 'choice' ada (1-20)
  result = initial_states.get(choice, initial_states[20])
 
- # Logika untuk menghasilkan state acak (dipanggil saat choice=0)
- if choice not in initial_states or choice == 0: 
-  numbers = list(range(9))
-  random.shuffle(numbers)
-  temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
-  
-  # =========================================================
-  # 🔑 MODE PRESENTASI: UNCOMMENT BARIS DI BAWAH INI
-  # Jika di-uncomment, hanya menghasilkan puzzle SOLVABLE.
-  # Jika di-comment, menghasilkan SOLVABLE (50%) dan UNSOLVEABLE (50%).
-  # =========================================================
-  
-  # while not is_solvable(temp_state):
-  #  random.shuffle(numbers)
-  #  temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
-  
-  # =========================================================
-  # 🔑 AKHIR MODE PRESENTASI
-  # =========================================================
-  
-  result = temp_state
+    # Logika untuk menghasilkan state acak (dipanggil saat choice=0)
+    if choice not in initial_states or choice == 0: 
+        numbers = list(range(9))
+        random.shuffle(numbers)
+        temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        
+        # =========================================================
+        # 🔑 MODE PRESENTASI: UNCOMMENT BARIS DI BAWAH INI
+        #    Jika di-uncomment, hanya menghasilkan puzzle SOLVABLE.
+        #    Jika di-comment, menghasilkan SOLVABLE (50%) dan UNSOLVEABLE (50%).
+        # =========================================================
+        
+        # while not is_solvable(temp_state):
+        #     random.shuffle(numbers)
+        #     temp_state = [numbers[i:i+3] for i in range(0, 9, 3)]
+        
+        # =========================================================
+        # 🔑 AKHIR MODE PRESENTASI
+        # =========================================================
+        
+        result = temp_state
 
  return result
 
